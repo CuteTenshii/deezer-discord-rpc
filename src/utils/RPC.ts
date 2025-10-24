@@ -9,21 +9,29 @@ export const client = new RPC.Client({
   clientId
 });
 
+let reconnecting = false;
+
 export function connect() {
   client.on('ready', () => {
     log('RPC', `Authed for user @${client.user?.username}`);
+    reconnecting = false;
   });
 
   client.on('disconnected', () => {
     log('RPC', 'Disconnected, trying to reconnect...');
-    const attempts = 0;
+    if (reconnecting) return;
+    reconnecting = true;
+    let attempts = 0;
     const attemptsInterval = setInterval(() => {
       client.login().then(() => {
         clearInterval(attemptsInterval);
+        reconnecting = false;
       }).catch(console.error);
-      log('RPC', `Reconnecting... Attempt ${attempts + 1}`);
+      attempts++;
+      log('RPC', `Reconnecting... Attempt ${attempts}`);
       if (attempts >= 5) {
         clearInterval(attemptsInterval);
+        reconnecting = false;
       }
     }, 8000);
   });
