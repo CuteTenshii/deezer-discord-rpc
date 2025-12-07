@@ -38,6 +38,11 @@ export async function setActivity({
     }
   };
 
+  const getTrackTitle = () => {
+    if (trackTitle.length == 1) return trackTitle.concat(' ');
+    return trackTitle;
+  };
+
   const getStatusName = () => {
     switch (statusName) {
       case 'song_title':
@@ -61,7 +66,7 @@ export async function setActivity({
   client.user.setActivity({
     type: ActivityType.Listening,
     name: getStatusName(),
-    details: trackTitle,
+    details: getTrackTitle(),
     detailsUrl: trackLink,
     state: trackArtists,
     stateUrl: firstArtistId ? `https://www.deezer.com/artist/${firstArtistId}` : undefined,
