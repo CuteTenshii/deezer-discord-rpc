@@ -29,7 +29,7 @@
     "electron-builder": "^26.0.12",
     "eslint": "^9.38.0",
     "fs-extra": "^11.3.2",
-    "globals": "^16.4.0",
+    "globals": "^17.0.0",
     "png-to-ico": "^3.0.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
