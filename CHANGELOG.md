@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.8
+
+* Removed adblocker which seemed to make login impossible. FYI audio ads should be still blocked.
+
 ## 1.3.7
 
 * Add links on the RPC to the artist, track and album

@@ -1,6 +1,5 @@
 import { userAgent } from '../variables';
 import { join, resolve } from 'path';
-import loadAdBlock from './AdBlock';
 import * as Config from './Config';
 import * as RPC from './RPC';
 import { log } from './Log';
@@ -32,12 +31,9 @@ export async function load(app: Electron.App) {
   win.show();
   win.setMenuBarVisibility(process.platform === 'darwin');
 
-  await loadAdBlock(app, win);
-
   await win.loadURL('https://account.deezer.com/login/', {
     // The default user agent does not work with Deezer (the player does not update by itself)
     userAgent,
-    httpReferrer: 'https://www.deezer.com/',
   });
 
   session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
