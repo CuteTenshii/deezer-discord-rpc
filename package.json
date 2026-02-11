@@ -1,6 +1,6 @@
 {
   "name": "deezer-discord-rpc",
-  "version": "1.3.7",
+  "version": "1.3.8",
   "description": "A Discord RPC for Deezer",
   "main": "./build/src/index.js",
   "scripts": {
@@ -22,16 +22,16 @@
     "@eslint/eslintrc": "^3.3.3",
     "@eslint/js": "^10.0.1",
     "@types/node": "^25.2.3",
-    "@typescript-eslint/eslint-plugin": "^8.55.0",
     "cpy-cli": "^7.0.0",
     "electron": "^40.3.0",
     "electron-builder": "^26.7.0",
-    "eslint": "10.0.0",
+    "eslint": "^10.0.0",
     "fs-extra": "^11.3.3",
     "globals": "^17.3.0",
     "png-to-ico": "^3.0.1",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.55.0"
   },
   "repository": "https://github.com/JustYuuto/deezer-discord-rpc.git",
   "author": {
