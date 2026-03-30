@@ -30,7 +30,7 @@
     "globals": "^17.3.0",
     "png-to-ico": "^3.0.1",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.3",
+    "typescript": "^6.0.2",
     "typescript-eslint": "^8.55.0"
   },
   "repository": "https://github.com/JustYuuto/deezer-discord-rpc.git",
