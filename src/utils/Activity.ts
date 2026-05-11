@@ -8,6 +8,7 @@ export async function setActivity({
   firstArtistId,
 }: ActivityOptions) {
   if (!client?.user) return;
+  const statusName = Config.get<string>(app, 'status_name');
 
   if (tray) {
     const tooltipText = Config.get<string>(app, 'tooltip_text');
