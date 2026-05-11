@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.9
+
+* Removed the axios dependency in favor of the native fetch API
+* Bumped dependencies (such as Electron)
+
 ## 1.3.8
 
 * Removed adblocker which seemed to make login impossible. FYI audio ads should be still blocked.
