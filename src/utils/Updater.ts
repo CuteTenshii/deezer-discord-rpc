@@ -1,8 +1,8 @@
 import { log } from './Log';
-import axios from 'axios';
 import { version } from '../../package.json';
 import { dialog, shell } from 'electron';
 import { readFileSync } from 'fs';
+import { win } from './Window';
 
 function getOsAndArch() {
   const os = process.platform;
@@ -59,15 +59,15 @@ export default async function updater(fromStartup: boolean = false) {
     } else {
       log('Updater', 'No updates found.');
       if (!fromStartup)
-        await dialog.showMessageBox(null, {
+        await dialog.showMessageBox(win, {
           type: 'info',
           title: 'No update available',
           message: 'You are using the latest version.',
         });
     }
   } catch (reason) {
-    log('Updater', 'Cannot get the latest release:', reason?.toString());
-    dialog.showMessageBox(null, {
+    log('Updater', 'Cannot get the latest release:', reason?.toString() ?? 'Unknown error');
+    dialog.showMessageBox(win, {
       type: 'error',
       buttons: ['Close', 'Retry'],
       title: 'Cannot get latest release',
@@ -89,6 +89,6 @@ export async function getLatestRelease(): Promise<{
   html_url: string;
 }> {
   const url = 'https://api.github.com/repos/JustYuuto/deezer-discord-rpc/releases/latest';
-  const release = await axios.get(url);
-  return release.data;
+  const res = await fetch(url);
+  return res.json();
 }

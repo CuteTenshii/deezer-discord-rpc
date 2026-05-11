@@ -1,16 +1,17 @@
 import { join } from 'path';
 import { existsSync, writeFileSync, readFileSync } from 'fs';
 import { dialog } from 'electron';
+import { win } from './Window';
 
 export async function set(app: Electron.App, key: string, value: unknown) {
   const path = getConfigPath(app);
   if (!existsSync(path)) writeFileSync(path, '{}');
-  const data = JSON.parse(readFileSync(path, 'utf-8'));;
+  const data = JSON.parse(readFileSync(path, 'utf-8'));
   data[key] = value;
   try {
     writeFileSync(path, JSON.stringify(data));
   } catch (e) {
-    dialog.showMessageBox(null, {
+    dialog.showMessageBox(win, {
       type: 'error',
       buttons: ['Close'],
       title: 'Failed to write config file',

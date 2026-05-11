@@ -1,11 +1,11 @@
 import { defineConfig, globalIgnores } from 'eslint/config';
-import typescriptEslint from '@typescript-eslint/eslint-plugin';
 import globals from 'globals';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import js from '@eslint/js';
 import { FlatCompat } from '@eslint/eslintrc';
 import eslint from '@eslint/js';
+import tseslint from 'typescript-eslint';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,14 +18,13 @@ const compat = new FlatCompat({
 export default defineConfig([
   globalIgnores(['**/dist/', '**/node_modules/']),
   eslint.configs.recommended,
+  tseslint.configs.recommended,
   {
-    extends: compat.extends('eslint:recommended', 'plugin:@typescript-eslint/recommended'),
-    plugins: {
-      '@typescript-eslint': typescriptEslint,
-    },
+    extends: compat.extends('eslint:recommended'),
     languageOptions: {
       globals: {
         ...globals.node,
+        Electron: true,
       },
       ecmaVersion: 'latest',
       sourceType: 'module',
@@ -37,7 +36,6 @@ export default defineConfig([
       quotes: ['error', 'single'],
       semi: ['error', 'always'],
       'object-curly-spacing': ['error', 'always'],
-      '@typescript-eslint/ban-ts-comment': 'warn',
     },
   }
 ]);

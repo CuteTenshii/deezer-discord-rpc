@@ -1,10 +1,10 @@
 {
   "compilerOptions": {
-    "target": "es2016",
+    "target": "es2020",
     "module": "CommonJS",
     "esModuleInterop": true,
     "outDir": "build/",
-    "moduleResolution": "Node",
+    "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "allowJs": true,
     "skipLibCheck": true
