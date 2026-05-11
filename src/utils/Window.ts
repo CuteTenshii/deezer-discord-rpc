@@ -216,6 +216,7 @@ async function updateActivity(app: Electron.App, currentTimeChanged?: boolean) {
     const result: JSResult = JSON.parse(r);
     const realSongTime = result.songTime;
     if (currentTrack && !currentTrack?.songTime) currentTrack.songTime = realSongTime;
+
     if (
       currentTrack?.trackTitle !== result.trackName || currentTrack?.playing !== result.playing || currentTimeChanged === true ||
       currentTrack?.songTime !== realSongTime
@@ -225,15 +226,16 @@ async function updateActivity(app: Electron.App, currentTimeChanged?: boolean) {
         reason = UpdateReason.MUSIC_CHANGED;
       else if (currentTrack?.playing !== result.playing)
         reason = result.playing ? UpdateReason.MUSIC_PLAYED : UpdateReason.MUSIC_PAUSED;
-      else if (currentTimeChanged && currentTimeChanged === true) reason = UpdateReason.MUSIC_TIME_CHANGED;
+      else if (currentTimeChanged) reason = UpdateReason.MUSIC_TIME_CHANGED;
       else if (currentTrack?.songTime !== realSongTime) reason = UpdateReason.MUSIC_NOT_RIGHT_TIME;
       log('Activity', 'Updating because', reason);
-      // @ts-expect-error wrong type
+
+      // @ts-expect-error Wrong type
       currentTrack = {
         trackId: result.trackId,
         trackTitle: result.trackName,
         trackArtists: result.playerType === 'mod' && !result.artists ? 'Unknown' : result.artists || result.playerType.replace(result.playerType[0], result.playerType[0].toUpperCase()),
-        albumCover: result.coverUrl,
+        albumCover: result.coverUrl || '',
         albumTitle: result.albumName || result.trackName,
         playing: result.playing,
       };
