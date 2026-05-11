@@ -7,27 +7,29 @@ export async function setActivity({
   timeLeft, playing, client, albumTitle, albumId, trackArtists, trackTitle, albumCover, app, type, trackId, songTime,
   firstArtistId,
 }: ActivityOptions) {
-  const tooltipText = Config.get<string>(app, 'tooltip_text');
-  const statusName = Config.get<string>(app, 'status_name');
-  switch (tooltipText) {
-    case 'app_name':
-      tray.setToolTip('Deezer Discord RPC');
-      break;
-    case 'app_version':
-      tray.setToolTip(`Version ${version}`);
-      break;
-    case 'app_name_and_version':
-      tray.setToolTip(`Deezer Discord RPC version ${version}`);
-      break;
-    case 'artists_and_title':
-      tray.setToolTip(`${trackArtists} - ${trackTitle}`);
-      break;
-    case 'title_and_artists':
-      tray.setToolTip(`${trackTitle} - ${trackArtists}`);
-      break;
+  if (!client?.user) return;
+
+  if (tray) {
+    const tooltipText = Config.get<string>(app, 'tooltip_text');
+    switch (tooltipText) {
+      case 'app_name':
+        tray.setToolTip('Deezer Discord RPC');
+        break;
+      case 'app_version':
+        tray.setToolTip(`Version ${version}`);
+        break;
+      case 'app_name_and_version':
+        tray.setToolTip(`Deezer Discord RPC version ${version}`);
+        break;
+      case 'artists_and_title':
+        tray.setToolTip(`${trackArtists} - ${trackTitle}`);
+        break;
+      case 'title_and_artists':
+        tray.setToolTip(`${trackTitle} - ${trackArtists}`);
+        break;
+    }
   }
-  if (!client) return;
-  if (!playing) return await client.user.clearActivity();
+  if (!playing) return client.user.clearActivity();
 
   const getTrackLink = () => {
     switch (type) {
@@ -38,6 +40,7 @@ export async function setActivity({
     }
   };
 
+  const statusName = Config.get<string>(app, 'status_name');
   const getStatusDisplayType = () => {
     switch (statusName) {
       case 'song_title':
@@ -73,7 +76,9 @@ export async function setActivity({
   };
 
   const trackLink = getTrackLink();
-  const button = (trackLink && parseInt(trackId) > 0) && { label: 'Play on Deezer', url: trackLink };
+  const button = (trackLink && Number.parseInt(trackId) > 0) ?
+    { label: 'Play on Deezer', url: trackLink } :
+    undefined;
   const isLivestream = (Date.now() + timeLeft) < Date.now();
   const playedTime = Date.now() - songTime + timeLeft;
 
