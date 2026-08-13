@@ -68,7 +68,9 @@ export async function setActivity({
   const isLivestream = (Date.now() + timeLeft) < Date.now();
   const playedTime = Date.now() - songTime + timeLeft;
 
-  client.user.setActivity({
+  // Return the promise so the caller can tell whether Discord accepted the update
+  // (it rejects on rate-limit). Errors are handled upstream, not swallowed here.
+  return client.user.setActivity({
     type: ActivityType.Listening,
     name: getStatusName(),
     details: getTrackTitle(),
@@ -82,7 +84,7 @@ export async function setActivity({
     startTimestamp: playedTime,
     [isLivestream ? 'startTimestamp' : 'endTimestamp']: Date.now() + timeLeft,
     buttons: button ? [button] : undefined,
-  }).catch(() => {});
+  });
 }
 
 interface ActivityOptions {
