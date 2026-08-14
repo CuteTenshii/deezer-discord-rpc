@@ -111,7 +111,7 @@
       button.disabled = true;
       button.textContent = 'Reloading…';
       status.textContent = 'Connecting to Deezer…';
-      window.ipcRenderer.send('retry_load');
+      window.deezerRpc.retryLoad();
     }
 
     button.addEventListener('click', retry);

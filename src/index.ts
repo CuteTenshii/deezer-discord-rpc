@@ -48,4 +48,8 @@ app.whenReady().then(async () => {
     if (!window.isVisible()) window.show();
     if (window.isMinimized()) window.maximize();
   });
+}).catch((reason) => {
+  const error = reason instanceof Error ? reason.message : String(reason);
+  log('App', 'Failed to start:', error);
+  app.quit();
 });
