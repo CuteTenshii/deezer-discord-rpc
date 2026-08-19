@@ -325,17 +325,6 @@ async function updateActivity(app: Electron.App, currentTimeChanged?: boolean) {
   });
 }
 
-interface CurrentTrack {
-  songTime: number,
-  trackId: string,
-  trackTitle: string,
-  trackArtists: string,
-  albumTitle: string,
-  albumCover: string,
-  playing: boolean,
-  radioCover: string,
-}
-
 interface JSResult {
   songTime: number,
   timeLeft: number,
