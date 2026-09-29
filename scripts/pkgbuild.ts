@@ -20,7 +20,7 @@ async function getMD5() {
 (async () => {
   const md5 = await getMD5();
   const file = `
-# Maintainer: Yuuto <notyuuto@outlook.com>
+# Maintainer: Tenshii <tenshii@miwa.lol>
 pkgname=deezer-discord-rpc-bin
 pkgver=${version}
 pkgrel=1
