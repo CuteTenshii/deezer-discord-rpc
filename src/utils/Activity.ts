@@ -7,7 +7,7 @@ export async function setActivity({
   timeLeft, playing, client, albumTitle, albumId, trackArtists, trackTitle, albumCover, app, type, trackId, songTime,
   firstArtistId,
 }: ActivityOptions) {
-  if (!client?.user) return;
+  if (!client?.user || !client.isConnected) throw new Error('Not connected to Discord');
   const statusName = Config.get<string>(app, 'status_name');
 
   if (tray) {
@@ -68,7 +68,8 @@ export async function setActivity({
   const isLivestream = (Date.now() + timeLeft) < Date.now();
   const playedTime = Date.now() - songTime + timeLeft;
 
-  client.user.setActivity({
+  // Rejections (e.g. Discord's rate limit) reach the caller so it can retry instead of assuming the update landed.
+  return client.user.setActivity({
     type: ActivityType.Listening,
     name: getStatusName(),
     details: getTrackTitle(),
@@ -82,7 +83,7 @@ export async function setActivity({
     startTimestamp: playedTime,
     [isLivestream ? 'startTimestamp' : 'endTimestamp']: Date.now() + timeLeft,
     buttons: button ? [button] : undefined,
-  }).catch(() => {});
+  });
 }
 
 interface ActivityOptions {

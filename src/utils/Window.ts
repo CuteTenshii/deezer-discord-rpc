@@ -12,11 +12,29 @@ const offlinePagePath = join(__dirname, '..', 'offline.html');
 // Chromium reports this when a navigation is replaced by another one, which is not a connection failure.
 const ERR_ABORTED = -3;
 
+// Deezer re-renders the player and silently detaches the MutationObservers, so a poll keeps Discord in sync anyway.
+const ACTIVITY_POLL_MS = 1500;
+const ACTIVITY_DEBOUNCE_MS = 300;
+// Discord allows about 5 SET_ACTIVITY calls per 20 seconds.
+const RATE_CAPACITY = 4;
+const RATE_REFILL_MS = 5000;
+const CLEARED_ACTIVITY = 'cleared';
+
 export let win: BrowserWindow;
-let currentTrack: CurrentTrack;
 let isQuitting = false;
 // Incremented on every page load so a watch started for an earlier page stops polling.
 let playerWatchId = 0;
+
+let activityPoll: ReturnType<typeof setInterval> | undefined;
+let pendingUpdate: ReturnType<typeof setTimeout> | undefined;
+let pendingTimeChanged = false;
+// A read that resolves after a newer one started is stale and must not overwrite Discord.
+let updateSeq = 0;
+// What Discord is confirmed to show; it only advances on a successful send, so failed updates get retried.
+let sentKey = '';
+let sendInFlight = false;
+let rateTokens = RATE_CAPACITY;
+let rateLastRefill = Date.now();
 
 export async function load(app: Electron.App) {
   const width = parseInt(await Config.get(app, 'window_width')) || 1920;
@@ -93,13 +111,21 @@ export async function load(app: Electron.App) {
   win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
     if (!isMainFrame || errorCode === ERR_ABORTED || validatedURL.startsWith('file:')) return;
     log('Window', 'Could not load', validatedURL, `(${errorDescription}), showing the offline page`);
+    stopActivityPoll();
     showOfflinePage(errorDescription);
   });
 
   // The player hooks live in the page, so every full load of Deezer (login redirect, reconnect) needs them again.
   win.webContents.on('did-finish-load', () => {
     playerWatchId++;
-    if (new URL(win.webContents.getURL()).hostname.endsWith('deezer.com')) watchForPlayer(playerWatchId);
+    stopActivityPoll();
+    if (new URL(win.webContents.getURL()).hostname.endsWith('deezer.com')) watchForPlayer(app, playerWatchId);
+  });
+
+  // Discord drops the activity when the connection closes, so resend it once the client is back.
+  RPC.client.on('ready', () => {
+    sentKey = '';
+    scheduleActivityUpdate(app);
   });
 
   // Without this, closing to tray would also veto quits coming from the OS (logout, macOS Cmd+Q).
@@ -111,6 +137,7 @@ export async function load(app: Electron.App) {
   win.on('close', (e) => {
     if (isQuitting) return;
     if (Config.get<boolean>(app, 'dont_close_to_tray')) {
+      stopActivityPoll();
       RPC.disconnect().catch(console.error);
       return;
     }
@@ -119,7 +146,7 @@ export async function load(app: Electron.App) {
   });
 
   ipcMain.on('update_activity', (_, currentTimeChanged) => {
-    updateActivity(app, currentTimeChanged);
+    scheduleActivityUpdate(app, currentTimeChanged === true);
   });
   ipcMain.on('nav_back', () => win.webContents.navigationHistory.goBack());
   ipcMain.on('nav_forward', () => win.webContents.navigationHistory.goForward());
@@ -140,16 +167,30 @@ function showOfflinePage(reason: string) {
   win.loadFile(offlinePagePath, { query: { reason } }).catch(console.error);
 }
 
-async function watchForPlayer(watchId: number) {
+async function watchForPlayer(app: Electron.App, watchId: number) {
   while (watchId === playerWatchId && !win.isDestroyed()) {
     // Rejects while the page is navigating; the next tick simply tries again.
     const element = await runJs('document.querySelector(\'[data-testid="item_title"]\')').catch(() => null);
     if (element) {
       injectPlayerHooks();
+      startActivityPoll(app);
       return;
     }
     await wait(50);
   }
+}
+
+function startActivityPoll(app: Electron.App) {
+  stopActivityPoll();
+  activityPoll = setInterval(() => {
+    if (win.isDestroyed()) return stopActivityPoll();
+    scheduleActivityUpdate(app);
+  }, ACTIVITY_POLL_MS);
+}
+
+function stopActivityPoll() {
+  clearInterval(activityPoll);
+  activityPoll = undefined;
 }
 
 function injectPlayerHooks() {
@@ -215,9 +256,31 @@ const UpdateReason = {
   MUSIC_NOT_RIGHT_TIME: 'song time wasn\'t the right one'
 };
 
-async function updateActivity(app: Electron.App, currentTimeChanged?: boolean) {
-  setThumbarButtons();
+function takeRateToken(): boolean {
+  const refills = Math.floor((Date.now() - rateLastRefill) / RATE_REFILL_MS);
+  if (refills > 0) {
+    rateTokens = Math.min(RATE_CAPACITY, rateTokens + refills);
+    rateLastRefill += refills * RATE_REFILL_MS;
+  }
+  if (rateTokens < 1) return false;
+  rateTokens--;
+  return true;
+}
 
+// Skipping tracks fires a burst of events; only the state after the burst is worth sending.
+function scheduleActivityUpdate(app: Electron.App, currentTimeChanged = false) {
+  if (currentTimeChanged) pendingTimeChanged = true;
+  clearTimeout(pendingUpdate);
+  pendingUpdate = setTimeout(() => {
+    pendingUpdate = undefined;
+    const timeChanged = pendingTimeChanged;
+    pendingTimeChanged = false;
+    updateActivity(app, timeChanged);
+  }, ACTIVITY_DEBOUNCE_MS);
+}
+
+async function updateActivity(app: Electron.App, currentTimeChanged: boolean) {
+  const seq = ++updateSeq;
   const client = RPC.client;
   // language=JavaScript
   const code = `(() => {
@@ -250,60 +313,54 @@ async function updateActivity(app: Electron.App, currentTimeChanged?: boolean) {
         isLivestreamRadio, firstArtistId
       });
     })()`;
-  runJs(code).then(async (r) => {
-    const result: JSResult = JSON.parse(r);
-    const realSongTime = result.songTime;
-    if (currentTrack && !currentTrack?.songTime) currentTrack.songTime = realSongTime;
+  const r = await runJs(code).catch(() => null);
+  if (!r || seq !== updateSeq) return;
+  const result: JSResult = JSON.parse(r);
 
-    if (
-      currentTrack?.trackTitle !== result.trackName || currentTrack?.playing !== result.playing || currentTimeChanged === true ||
-      currentTrack?.songTime !== realSongTime
-    ) {
-      let reason = '';
-      if (currentTrack?.trackTitle !== result.trackName)
-        reason = UpdateReason.MUSIC_CHANGED;
-      else if (currentTrack?.playing !== result.playing)
-        reason = result.playing ? UpdateReason.MUSIC_PLAYED : UpdateReason.MUSIC_PAUSED;
-      else if (currentTimeChanged) reason = UpdateReason.MUSIC_TIME_CHANGED;
-      else if (currentTrack?.songTime !== realSongTime) reason = UpdateReason.MUSIC_NOT_RIGHT_TIME;
-      log('Activity', 'Updating because', reason);
+  // The duration is part of the key because Deezer reports 0 until the track has loaded.
+  const desiredKey = result.playing ? `${result.trackId}|${result.trackName}|${result.songTime}` : CLEARED_ACTIVITY;
+  if (desiredKey === sentKey && !currentTimeChanged) return;
+  if (sendInFlight || !client.isConnected || !takeRateToken()) {
+    if (currentTimeChanged) pendingTimeChanged = true;
+    return;
+  }
 
-      // @ts-expect-error Wrong type
-      currentTrack = {
-        trackId: result.trackId,
-        trackTitle: result.trackName,
-        trackArtists: result.playerType === 'mod' && !result.artists ? 'Unknown' : result.artists || result.playerType.replace(result.playerType[0], result.playerType[0].toUpperCase()),
-        albumCover: result.coverUrl || '',
-        albumTitle: result.albumName || result.trackName,
-        playing: result.playing,
-      };
+  let reason: string;
+  if (!result.playing) reason = UpdateReason.MUSIC_PAUSED;
+  else if (sentKey === CLEARED_ACTIVITY) reason = UpdateReason.MUSIC_PLAYED;
+  else if (currentTimeChanged) reason = UpdateReason.MUSIC_TIME_CHANGED;
+  else if (sentKey.startsWith(`${result.trackId}|${result.trackName}|`)) reason = UpdateReason.MUSIC_NOT_RIGHT_TIME;
+  else reason = UpdateReason.MUSIC_CHANGED;
+  log('Activity', 'Updating because', reason);
+  setThumbarButtons();
 
-      await setActivity({
-        client,
-        albumId: result.albumId,
-        firstArtistId: result.firstArtistId,
-        timeLeft: result.timeLeft,
-        app,
-        ...currentTrack,
-        type: result.mediaType,
-        songTime: realSongTime
-      }).then(() => log('Activity', 'Updated'));
-    }
-    currentTrack.songTime = realSongTime;
-    currentTrack.trackTitle = result.trackName;
-    currentTrack.playing = result.playing;
+  sendInFlight = true;
+  const sent = await setActivity({
+    client,
+    albumId: result.albumId,
+    firstArtistId: result.firstArtistId,
+    timeLeft: result.timeLeft,
+    app,
+    trackId: result.trackId,
+    trackTitle: result.trackName,
+    trackArtists: result.playerType === 'mod' && !result.artists ? 'Unknown' : result.artists || result.playerType.replace(result.playerType[0], result.playerType[0].toUpperCase()),
+    albumCover: result.coverUrl || '',
+    albumTitle: result.albumName || result.trackName,
+    playing: result.playing,
+    type: result.mediaType,
+    songTime: result.songTime,
+  }).then(() => true).catch((reason) => {
+    log('Activity', 'Update failed, retrying:', reason?.toString() ?? 'Unknown error');
+    return false;
   });
-}
+  sendInFlight = false;
 
-interface CurrentTrack {
-  songTime: number,
-  trackId: string,
-  trackTitle: string,
-  trackArtists: string,
-  albumTitle: string,
-  albumCover: string,
-  playing: boolean,
-  radioCover: string,
+  if (sent) {
+    sentKey = desiredKey;
+    log('Activity', 'Updated');
+  } else if (currentTimeChanged) {
+    pendingTimeChanged = true;
+  }
 }
 
 interface JSResult {
