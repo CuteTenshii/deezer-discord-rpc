@@ -88,7 +88,7 @@ export async function getLatestRelease(): Promise<{
   }[];
   html_url: string;
 }> {
-  const url = 'https://api.github.com/repos/JustYuuto/deezer-discord-rpc/releases/latest';
+  const url = 'https://api.github.com/repos/CuteTenshii/deezer-discord-rpc/releases/latest';
   const res = await fetch(url);
   return res.json();
 }

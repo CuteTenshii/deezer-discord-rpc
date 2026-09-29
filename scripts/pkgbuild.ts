@@ -5,7 +5,7 @@ import { promisify } from 'util';
 import { createHash } from 'crypto';
 
 const pipelineAsync = promisify(pipeline);
-const downloadUrl = 'https://github.com/JustYuuto/deezer-discord-rpc/releases/latest/download/DeezerDiscordRPC-linux-amd64.deb';
+const downloadUrl = 'https://github.com/CuteTenshii/deezer-discord-rpc/releases/latest/download/DeezerDiscordRPC-linux-amd64.deb';
 async function getMD5() {
   const res = await fetch(downloadUrl);
   if (!res.ok) throw new Error(`Failed to fetch file: ${res.statusText}`);
@@ -26,7 +26,7 @@ pkgver=${version}
 pkgrel=1
 pkgdesc="${description}"
 arch=('x86_64')
-url="https://github.com/JustYuuto/deezer-discord-rpc"
+url="https://github.com/CuteTenshii/deezer-discord-rpc"
 license=('${license}')
 depends=('electron')
 source=("${downloadUrl}")
