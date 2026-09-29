@@ -9,6 +9,7 @@ import { setActivity } from './Activity';
 
 export let win: BrowserWindow;
 let currentTrack: CurrentTrack;
+let isQuitting = false;
 
 export async function load(app: Electron.App) {
   const width = parseInt(await Config.get(app, 'window_width')) || 1920;
@@ -87,15 +88,20 @@ export async function load(app: Electron.App) {
     }
   });
 
-  win.on('close', async (e) => {
-    if (await Config.get(app, 'dont_close_to_tray')) {
-      await RPC.disconnect();
-      return true;
+  // Without this, closing to tray would also veto quits coming from the OS (logout, macOS Cmd+Q).
+  app.on('before-quit', () => {
+    isQuitting = true;
+  });
+
+  // Must stay synchronous: Electron ignores preventDefault() once the handler has yielded.
+  win.on('close', (e) => {
+    if (isQuitting) return;
+    if (Config.get<boolean>(app, 'dont_close_to_tray')) {
+      RPC.disconnect().catch(console.error);
+      return;
     }
     e.preventDefault();
     win.hide();
-
-    return false;
   });
 
   ipcMain.on('update_activity', (_, currentTimeChanged) => {
@@ -107,6 +113,11 @@ export async function load(app: Electron.App) {
   // Wait for the player to be fully initialized
   await new Promise<void>((r) => {
     const interval = setInterval(async () => {
+      // Quitting before the player loads destroys the window while this is still polling.
+      if (win.isDestroyed()) {
+        clearInterval(interval);
+        return;
+      }
       const element = await runJs('document.querySelector(\'[data-testid="item_title"]\')');
       if (element) {
         clearInterval(interval);
