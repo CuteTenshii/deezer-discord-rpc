@@ -3,13 +3,20 @@ import { join, resolve } from 'path';
 import * as Config from './Config';
 import * as RPC from './RPC';
 import { log } from './Log';
-import { runJs } from '../functions';
+import { runJs, wait } from '../functions';
 import { BrowserWindow, ipcMain, shell, nativeImage, session } from 'electron';
 import { setActivity } from './Activity';
+
+const deezerUrl = 'https://account.deezer.com/login/';
+const offlinePagePath = join(__dirname, '..', 'offline.html');
+// Chromium reports this when a navigation is replaced by another one, which is not a connection failure.
+const ERR_ABORTED = -3;
 
 export let win: BrowserWindow;
 let currentTrack: CurrentTrack;
 let isQuitting = false;
+// Incremented on every page load so a watch started for an earlier page stops polling.
+let playerWatchId = 0;
 
 export async function load(app: Electron.App) {
   const width = parseInt(await Config.get(app, 'window_width')) || 1920;
@@ -31,11 +38,6 @@ export async function load(app: Electron.App) {
   win.focus();
   win.show();
   win.setMenuBarVisibility(process.platform === 'darwin');
-
-  await win.loadURL('https://account.deezer.com/login/', {
-    // The default user agent does not work with Deezer (the player does not update by itself)
-    userAgent,
-  });
 
   session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
     if (details.url.includes('deezer.com'))
@@ -88,6 +90,18 @@ export async function load(app: Electron.App) {
     }
   });
 
+  win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame || errorCode === ERR_ABORTED || validatedURL.startsWith('file:')) return;
+    log('Window', 'Could not load', validatedURL, `(${errorDescription}), showing the offline page`);
+    showOfflinePage(errorDescription);
+  });
+
+  // The player hooks live in the page, so every full load of Deezer (login redirect, reconnect) needs them again.
+  win.webContents.on('did-finish-load', () => {
+    playerWatchId++;
+    if (new URL(win.webContents.getURL()).hostname.endsWith('deezer.com')) watchForPlayer(playerWatchId);
+  });
+
   // Without this, closing to tray would also veto quits coming from the OS (logout, macOS Cmd+Q).
   app.on('before-quit', () => {
     isQuitting = true;
@@ -109,23 +123,36 @@ export async function load(app: Electron.App) {
   });
   ipcMain.on('nav_back', () => win.webContents.navigationHistory.goBack());
   ipcMain.on('nav_forward', () => win.webContents.navigationHistory.goForward());
+  ipcMain.on('retry_load', () => loadDeezer());
 
-  // Wait for the player to be fully initialized
-  await new Promise<void>((r) => {
-    const interval = setInterval(async () => {
-      // Quitting before the player loads destroys the window while this is still polling.
-      if (win.isDestroyed()) {
-        clearInterval(interval);
-        return;
-      }
-      const element = await runJs('document.querySelector(\'[data-testid="item_title"]\')');
-      if (element) {
-        clearInterval(interval);
-        r();
-      }
-    }, 50);
-  });
+  await loadDeezer();
+}
 
+async function loadDeezer() {
+  // A failed load also rejects here; the did-fail-load listener already swaps in the offline page.
+  await win.loadURL(deezerUrl, {
+    // The default user agent does not work with Deezer (the player does not update by itself)
+    userAgent,
+  }).catch(() => undefined);
+}
+
+function showOfflinePage(reason: string) {
+  win.loadFile(offlinePagePath, { query: { reason } }).catch(console.error);
+}
+
+async function watchForPlayer(watchId: number) {
+  while (watchId === playerWatchId && !win.isDestroyed()) {
+    // Rejects while the page is navigating; the next tick simply tries again.
+    const element = await runJs('document.querySelector(\'[data-testid="item_title"]\')').catch(() => null);
+    if (element) {
+      injectPlayerHooks();
+      return;
+    }
+    await wait(50);
+  }
+}
+
+function injectPlayerHooks() {
   runJs(`document.querySelector('[data-testid="miniplayer_container"] .slider').addEventListener('click', () => ipcRenderer.send('update_activity', true))
          const trackObserver = new MutationObserver(() => ipcRenderer.send('update_activity', false));
          trackObserver.observe(document.querySelector('.marquee-content > [data-testid="item_title"]'), { childList: true, subtree: true, characterData: true });

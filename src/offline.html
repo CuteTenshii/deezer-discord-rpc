@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Deezer Discord RPC</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #fdfcfe;
+      --text: #0f0d13;
+      --text-secondary: #6f6d71;
+      --accent: #a238ff;
+      --accent-strong: #9333e8;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f0d13;
+        --text: #fdfcfe;
+        --text-secondary: #a9a6aa;
+      }
+    }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+      box-sizing: border-box;
+      padding: 24px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, system-ui, sans-serif;
+    }
+
+    main {
+      max-width: 28rem;
+      text-align: center;
+    }
+
+    img {
+      width: 72px;
+      height: 72px;
+    }
+
+    h1 {
+      margin: 1.5rem 0 0.75rem;
+      font-size: 1.75rem;
+      font-weight: 800;
+    }
+
+    p {
+      margin: 0 0 2rem;
+      color: var(--text-secondary);
+      font-size: 1rem;
+      line-height: 1.5;
+    }
+
+    button {
+      min-height: 44px;
+      padding: 0.75rem 1.75rem;
+      border: 0;
+      border-radius: 256px;
+      background: var(--accent);
+      color: #fff;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    button:hover,
+    button:disabled {
+      background: var(--accent-strong);
+    }
+
+    button:disabled {
+      cursor: progress;
+    }
+
+    button:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
+    }
+
+    #status {
+      margin: 1.5rem 0 0;
+      font-size: 0.8125rem;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <img src="img/app.png" alt="">
+    <h1>Can't reach Deezer</h1>
+    <p>Check your internet connection. The app reloads Deezer by itself as soon as you're back online.</p>
+    <button id="retry" type="button">Reload Deezer</button>
+    <p id="status" role="status"></p>
+  </main>
+  <script>
+    const button = document.getElementById('retry');
+    const status = document.getElementById('status');
+    const reason = new URLSearchParams(location.search).get('reason');
+    if (reason) status.textContent = 'Error: ' + reason;
+
+    function retry() {
+      button.disabled = true;
+      button.textContent = 'Reloading…';
+      status.textContent = 'Connecting to Deezer…';
+      window.ipcRenderer.send('retry_load');
+    }
+
+    button.addEventListener('click', retry);
+    window.addEventListener('online', retry);
+  </script>
+</body>
+</html>
