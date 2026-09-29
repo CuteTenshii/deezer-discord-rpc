@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.10
+
+* Fixed an "Object has been destroyed" error when closing the window or quitting
+* The AppImage no longer needs libfuse2 installed
+* The AUR package no longer installs the system Electron, which it never used
+* Bumped dependencies (Electron 44)
+
 ## 1.3.9
 
 * Removed the axios dependency in favor of the native fetch API
