@@ -67,6 +67,8 @@ export default async function updater(fromStartup: boolean = false) {
     }
   } catch (reason) {
     log('Updater', 'Cannot get the latest release:', reason?.toString() ?? 'Unknown error');
+    // Starting offline is expected now that the window has an offline page; only a manual check reports it.
+    if (fromStartup) return;
     dialog.showMessageBox(win, {
       type: 'error',
       buttons: ['Close', 'Retry'],
@@ -88,7 +90,7 @@ export async function getLatestRelease(): Promise<{
   }[];
   html_url: string;
 }> {
-  const url = 'https://api.github.com/repos/JustYuuto/deezer-discord-rpc/releases/latest';
+  const url = 'https://api.github.com/repos/CuteTenshii/deezer-discord-rpc/releases/latest';
   const res = await fetch(url);
   return res.json();
 }

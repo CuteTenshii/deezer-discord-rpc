@@ -30,7 +30,12 @@ const config = {
     category: 'Audio;AudioVideo',
     target: ['snap', 'deb', 'AppImage', 'rpm'],
     publish: null,
-    icon: join(__dirname, '..', 'src', 'img', 'app.icns'),
+    icon: join(__dirname, '..', 'src', 'img', 'app.png'),
+  },
+  toolsets: {
+    // The legacy runtime links against the host glibc and needs libfuse2;
+    // 1.0.3 ships the static type-2 runtime so the AppImage runs without them.
+    appimage: '1.0.3',
   },
   artifactName: 'DeezerDiscordRPC-${os}-${arch}.${ext}',
   files: [

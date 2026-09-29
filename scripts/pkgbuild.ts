@@ -1,36 +1,38 @@
 import { writeFile } from 'fs/promises';
 import { version, description, license } from '../package.json';
-import { pipeline } from 'stream';
-import { promisify } from 'util';
 import { createHash } from 'crypto';
 
-const pipelineAsync = promisify(pipeline);
-const downloadUrl = 'https://github.com/JustYuuto/deezer-discord-rpc/releases/latest/download/DeezerDiscordRPC-linux-amd64.deb';
-async function getMD5() {
+const downloadUrl = 'https://github.com/CuteTenshii/deezer-discord-rpc/releases/latest/download/DeezerDiscordRPC-linux-amd64.deb';
+
+// Both digests are computed from one download so they always describe the same file.
+async function getChecksums() {
   const res = await fetch(downloadUrl);
   if (!res.ok) throw new Error(`Failed to fetch file: ${res.statusText}`);
   if (!res.body) throw new Error('No response body');
-  const body = res.body;
-  const hash = createHash('md5');
-  // @ts-expect-error Types
-  await pipelineAsync(body, hash);
-  return hash.digest('hex');
+  const md5 = createHash('md5');
+  const sha256 = createHash('sha256');
+  for await (const chunk of res.body) {
+    md5.update(chunk);
+    sha256.update(chunk);
+  }
+  return { md5: md5.digest('hex'), sha256: sha256.digest('hex') };
 }
 
 (async () => {
-  const md5 = await getMD5();
+  const { md5, sha256 } = await getChecksums();
   const file = `
-# Maintainer: Yuuto <notyuuto@outlook.com>
+# Maintainer: Tenshii <tenshii@miwa.lol>
 pkgname=deezer-discord-rpc-bin
 pkgver=${version}
 pkgrel=1
 pkgdesc="${description}"
 arch=('x86_64')
-url="https://github.com/JustYuuto/deezer-discord-rpc"
+url="https://github.com/CuteTenshii/deezer-discord-rpc"
 license=('${license}')
-depends=('electron')
+depends=('gtk3' 'nss' 'alsa-lib' 'mesa' 'xdg-utils')
 source=("${downloadUrl}")
 md5sums=("${md5}")
+sha256sums=("${sha256}")
 
 package() {
     # Extract the .deb file
