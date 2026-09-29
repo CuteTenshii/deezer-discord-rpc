@@ -7,7 +7,7 @@ export async function setActivity({
   timeLeft, playing, client, albumTitle, albumId, trackArtists, trackTitle, albumCover, app, type, trackId, songTime,
   firstArtistId,
 }: ActivityOptions) {
-  if (!client?.user) return;
+  if (!client?.user || !client.isConnected) throw new Error('Not connected to Discord');
   const statusName = Config.get<string>(app, 'status_name');
 
   if (tray) {
@@ -68,8 +68,7 @@ export async function setActivity({
   const isLivestream = (Date.now() + timeLeft) < Date.now();
   const playedTime = Date.now() - songTime + timeLeft;
 
-  // Return the promise so the caller can tell whether Discord accepted the update
-  // (it rejects on rate-limit). Errors are handled upstream, not swallowed here.
+  // Rejections (e.g. Discord's rate limit) reach the caller so it can retry instead of assuming the update landed.
   return client.user.setActivity({
     type: ActivityType.Listening,
     name: getStatusName(),

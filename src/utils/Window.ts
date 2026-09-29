@@ -12,15 +12,29 @@ const offlinePagePath = join(__dirname, '..', 'offline.html');
 // Chromium reports this when a navigation is replaced by another one, which is not a connection failure.
 const ERR_ABORTED = -3;
 
+// Deezer re-renders the player and silently detaches the MutationObservers, so a poll keeps Discord in sync anyway.
+const ACTIVITY_POLL_MS = 1500;
+const ACTIVITY_DEBOUNCE_MS = 300;
+// Discord allows about 5 SET_ACTIVITY calls per 20 seconds.
+const RATE_CAPACITY = 4;
+const RATE_REFILL_MS = 5000;
+const CLEARED_ACTIVITY = 'cleared';
+
 export let win: BrowserWindow;
-// Safety-net poller: MutationObservers get attached once to specific DOM nodes,
-// but Deezer is a React SPA and destroys/recreates those nodes on re-render, which
-// silently kills the observers and freezes the Discord activity. Polling dzPlayer
-// (the always-up-to-date source of truth) on an interval self-heals the desync.
-let pollInterval: ReturnType<typeof setInterval> | undefined;
 let isQuitting = false;
 // Incremented on every page load so a watch started for an earlier page stops polling.
 let playerWatchId = 0;
+
+let activityPoll: ReturnType<typeof setInterval> | undefined;
+let pendingUpdate: ReturnType<typeof setTimeout> | undefined;
+let pendingTimeChanged = false;
+// A read that resolves after a newer one started is stale and must not overwrite Discord.
+let updateSeq = 0;
+// What Discord is confirmed to show; it only advances on a successful send, so failed updates get retried.
+let sentKey = '';
+let sendInFlight = false;
+let rateTokens = RATE_CAPACITY;
+let rateLastRefill = Date.now();
 
 export async function load(app: Electron.App) {
   const width = parseInt(await Config.get(app, 'window_width')) || 1920;
@@ -97,13 +111,21 @@ export async function load(app: Electron.App) {
   win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
     if (!isMainFrame || errorCode === ERR_ABORTED || validatedURL.startsWith('file:')) return;
     log('Window', 'Could not load', validatedURL, `(${errorDescription}), showing the offline page`);
+    stopActivityPoll();
     showOfflinePage(errorDescription);
   });
 
   // The player hooks live in the page, so every full load of Deezer (login redirect, reconnect) needs them again.
   win.webContents.on('did-finish-load', () => {
     playerWatchId++;
+    stopActivityPoll();
     if (new URL(win.webContents.getURL()).hostname.endsWith('deezer.com')) watchForPlayer(app, playerWatchId);
+  });
+
+  // Discord drops the activity when the connection closes, so resend it once the client is back.
+  RPC.client.on('ready', () => {
+    sentKey = '';
+    scheduleActivityUpdate(app);
   });
 
   // Without this, closing to tray would also veto quits coming from the OS (logout, macOS Cmd+Q).
@@ -115,7 +137,7 @@ export async function load(app: Electron.App) {
   win.on('close', (e) => {
     if (isQuitting) return;
     if (Config.get<boolean>(app, 'dont_close_to_tray')) {
-      if (pollInterval) clearInterval(pollInterval);
+      stopActivityPoll();
       RPC.disconnect().catch(console.error);
       return;
     }
@@ -124,7 +146,7 @@ export async function load(app: Electron.App) {
   });
 
   ipcMain.on('update_activity', (_, currentTimeChanged) => {
-    scheduleActivityUpdate(app, currentTimeChanged);
+    scheduleActivityUpdate(app, currentTimeChanged === true);
   });
   ipcMain.on('nav_back', () => win.webContents.navigationHistory.goBack());
   ipcMain.on('nav_forward', () => win.webContents.navigationHistory.goForward());
@@ -150,14 +172,28 @@ async function watchForPlayer(app: Electron.App, watchId: number) {
     // Rejects while the page is navigating; the next tick simply tries again.
     const element = await runJs('document.querySelector(\'[data-testid="item_title"]\')').catch(() => null);
     if (element) {
-      injectPlayerHooks(app);
+      injectPlayerHooks();
+      startActivityPoll(app);
       return;
     }
     await wait(50);
   }
 }
 
-function injectPlayerHooks(app: Electron.App) {
+function startActivityPoll(app: Electron.App) {
+  stopActivityPoll();
+  activityPoll = setInterval(() => {
+    if (win.isDestroyed()) return stopActivityPoll();
+    scheduleActivityUpdate(app);
+  }, ACTIVITY_POLL_MS);
+}
+
+function stopActivityPoll() {
+  clearInterval(activityPoll);
+  activityPoll = undefined;
+}
+
+function injectPlayerHooks() {
   runJs(`document.querySelector('[data-testid="miniplayer_container"] .slider').addEventListener('click', () => ipcRenderer.send('update_activity', true))
          const trackObserver = new MutationObserver(() => ipcRenderer.send('update_activity', false));
          trackObserver.observe(document.querySelector('.marquee-content > [data-testid="item_title"]'), { childList: true, subtree: true, characterData: true });
@@ -182,13 +218,6 @@ function injectPlayerHooks(app: Electron.App) {
          navContainer.appendChild(forwardButton);
          chakraStack.replaceWith(navContainer);`);
   setThumbarButtons();
-
-  // Re-run load() (e.g. app 'activate') must not stack intervals.
-  if (pollInterval) clearInterval(pollInterval);
-  pollInterval = setInterval(() => {
-    if (win.isDestroyed() || win.webContents.isDestroyed()) return;
-    scheduleActivityUpdate(app);
-  }, 1500);
 }
 
 export async function showWindow() {
@@ -227,58 +256,31 @@ const UpdateReason = {
   MUSIC_NOT_RIGHT_TIME: 'song time wasn\'t the right one'
 };
 
-// Rapid track skips fire many update events at once (observers + poll). Sending a
-// setActivity for each one races (an older async read can resolve last and overwrite
-// Discord with a stale track) and blows past Discord's ~5-updates/20s rate limit, so
-// some updates (including the pause/clear) get silently dropped. We coalesce bursts
-// with a short debounce and only push the final state.
-let pendingUpdate: ReturnType<typeof setTimeout> | undefined;
-let pendingTimeChanged = false;
-// Bumped on every read; a resolving snapshot whose seq is stale is discarded, so an
-// out-of-order older read can never overwrite a newer one.
-let updateSeq = 0;
-
-// Discord's SET_ACTIVITY is rate limited (~5 per 20s). A token bucket keeps us under it.
-// Crucially, `sentKey` (what Discord is confirmed to be showing) only advances on a
-// SUCCESSFUL send — so a dropped/rate-limited update leaves sentKey stale and the poll
-// keeps retrying until Discord really has the right state. This is what stops Discord
-// getting stuck on an already-skipped track (or refusing to clear on pause).
-const RATE_CAPACITY = 4;
-const RATE_REFILL_MS = 5000;
-let rateTokens = RATE_CAPACITY;
-let rateLastRefill = Date.now();
-let sentKey = '';
-let sendInFlight = false;
-
-function takeToken(): boolean {
-  const now = Date.now();
-  const refill = Math.floor((now - rateLastRefill) / RATE_REFILL_MS);
-  if (refill > 0) {
-    rateTokens = Math.min(RATE_CAPACITY, rateTokens + refill);
-    rateLastRefill += refill * RATE_REFILL_MS;
+function takeRateToken(): boolean {
+  const refills = Math.floor((Date.now() - rateLastRefill) / RATE_REFILL_MS);
+  if (refills > 0) {
+    rateTokens = Math.min(RATE_CAPACITY, rateTokens + refills);
+    rateLastRefill += refills * RATE_REFILL_MS;
   }
-  if (rateTokens >= 1) {
-    rateTokens -= 1;
-    return true;
-  }
-  return false;
+  if (rateTokens < 1) return false;
+  rateTokens--;
+  return true;
 }
 
-function scheduleActivityUpdate(app: Electron.App, currentTimeChanged?: boolean) {
+// Skipping tracks fires a burst of events; only the state after the burst is worth sending.
+function scheduleActivityUpdate(app: Electron.App, currentTimeChanged = false) {
   if (currentTimeChanged) pendingTimeChanged = true;
-  if (pendingUpdate) clearTimeout(pendingUpdate);
+  clearTimeout(pendingUpdate);
   pendingUpdate = setTimeout(() => {
     pendingUpdate = undefined;
     const timeChanged = pendingTimeChanged;
     pendingTimeChanged = false;
     updateActivity(app, timeChanged);
-  }, 300);
+  }, ACTIVITY_DEBOUNCE_MS);
 }
 
-async function updateActivity(app: Electron.App, currentTimeChanged?: boolean) {
-  setThumbarButtons();
+async function updateActivity(app: Electron.App, currentTimeChanged: boolean) {
   const seq = ++updateSeq;
-
   const client = RPC.client;
   // language=JavaScript
   const code = `(() => {
@@ -311,56 +313,54 @@ async function updateActivity(app: Electron.App, currentTimeChanged?: boolean) {
         isLivestreamRadio, firstArtistId
       });
     })()`;
-  runJs(code).then(async (r) => {
-    // A newer update was requested while this read was in flight: drop this stale
-    // snapshot so it can't overwrite Discord (or currentTrack) with an older track.
-    if (seq !== updateSeq) return;
-    const result: JSResult = JSON.parse(r);
-    const seek = currentTimeChanged === true;
-    // The state Discord should be showing right now. When paused, ALL Deezer activity
-    // is torn down (setActivity clears it), so the desired state is simply 'cleared'.
-    const desiredKey = result.playing ? `${result.trackId}|${result.trackName}` : 'cleared';
+  const r = await runJs(code).catch(() => null);
+  if (!r || seq !== updateSeq) return;
+  const result: JSResult = JSON.parse(r);
 
-    // Already in sync (and not a manual seek): nothing to send.
-    if (desiredKey === sentKey && !seek) return;
-    // A send is in flight, or we're out of rate-limit budget: do NOT touch sentKey so
-    // the poll retries until Discord confirms the state (self-healing, never stuck).
-    if (sendInFlight || !takeToken()) return;
+  // The duration is part of the key because Deezer reports 0 until the track has loaded.
+  const desiredKey = result.playing ? `${result.trackId}|${result.trackName}|${result.songTime}` : CLEARED_ACTIVITY;
+  if (desiredKey === sentKey && !currentTimeChanged) return;
+  if (sendInFlight || !client.isConnected || !takeRateToken()) {
+    if (currentTimeChanged) pendingTimeChanged = true;
+    return;
+  }
 
-    const reason = !result.playing ? UpdateReason.MUSIC_PAUSED
-      : seek ? UpdateReason.MUSIC_TIME_CHANGED : UpdateReason.MUSIC_CHANGED;
-    log('Activity', 'Updating because', reason);
+  let reason: string;
+  if (!result.playing) reason = UpdateReason.MUSIC_PAUSED;
+  else if (sentKey === CLEARED_ACTIVITY) reason = UpdateReason.MUSIC_PLAYED;
+  else if (currentTimeChanged) reason = UpdateReason.MUSIC_TIME_CHANGED;
+  else if (sentKey.startsWith(`${result.trackId}|${result.trackName}|`)) reason = UpdateReason.MUSIC_NOT_RIGHT_TIME;
+  else reason = UpdateReason.MUSIC_CHANGED;
+  log('Activity', 'Updating because', reason);
+  setThumbarButtons();
 
-    const trackArtists = result.playerType === 'mod' && !result.artists ? 'Unknown' :
-      result.artists || result.playerType.replace(result.playerType[0], result.playerType[0].toUpperCase());
-
-    sendInFlight = true;
-    const ok = await setActivity({
-      client,
-      albumId: result.albumId,
-      firstArtistId: result.firstArtistId,
-      timeLeft: result.timeLeft,
-      app,
-      trackId: result.trackId,
-      trackTitle: result.trackName,
-      trackArtists,
-      albumCover: result.coverUrl || '',
-      albumTitle: result.albumName || result.trackName,
-      playing: result.playing,
-      type: result.mediaType,
-      songTime: result.songTime,
-    }).then(() => true).catch(() => false);
-    sendInFlight = false;
-
-    if (ok) {
-      // Only now do we believe Discord shows this state.
-      sentKey = desiredKey;
-      log('Activity', 'Updated ->', desiredKey);
-    } else {
-      // Rate-limited or errored: sentKey stays stale, poll will retry within ~1.5s.
-      log('Activity', 'Send failed, will retry ->', desiredKey);
-    }
+  sendInFlight = true;
+  const sent = await setActivity({
+    client,
+    albumId: result.albumId,
+    firstArtistId: result.firstArtistId,
+    timeLeft: result.timeLeft,
+    app,
+    trackId: result.trackId,
+    trackTitle: result.trackName,
+    trackArtists: result.playerType === 'mod' && !result.artists ? 'Unknown' : result.artists || result.playerType.replace(result.playerType[0], result.playerType[0].toUpperCase()),
+    albumCover: result.coverUrl || '',
+    albumTitle: result.albumName || result.trackName,
+    playing: result.playing,
+    type: result.mediaType,
+    songTime: result.songTime,
+  }).then(() => true).catch((reason) => {
+    log('Activity', 'Update failed, retrying:', reason?.toString() ?? 'Unknown error');
+    return false;
   });
+  sendInFlight = false;
+
+  if (sent) {
+    sentKey = desiredKey;
+    log('Activity', 'Updated');
+  } else if (currentTimeChanged) {
+    pendingTimeChanged = true;
+  }
 }
 
 interface JSResult {
