@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.0
+
+* The Discord status now stays in sync with Deezer: it no longer shows a previous track or stays stuck on pause, and it comes back after Discord reconnects (https://github.com/CuteTenshii/deezer-discord-rpc/pull/186)
+* A page is shown when Deezer can't be reached, instead of a blank window
+* The app no longer shows an update error when the check fails at startup
+* On Linux, the app's windows are now grouped under its desktop entry
+* Added a Nix flake for installing on NixOS
+
 ## 1.3.10
 
 * Fixed an "Object has been destroyed" error when closing the window or quitting
