@@ -28,6 +28,7 @@
     "eslint": "^10.11.0",
     "fs-extra": "^11.4.1",
     "globals": "^17.12.0",
+    "lefthook": "^2.1.15",
     "png-to-ico": "^3.0.2",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.3",

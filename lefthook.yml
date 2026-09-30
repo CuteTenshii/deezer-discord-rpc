@@ -1,0 +1,9 @@
+pre-commit:
+  parallel: true
+  commands:
+    lint:
+      glob: "src/**/*.ts"
+      run: bun eslint {staged_files}
+    typecheck:
+      glob: "src/**/*.ts"
+      run: bun run typecheck
