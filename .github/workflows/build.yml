@@ -31,18 +31,16 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
+      - uses: oven-sh/setup-bun@v2
 
       - name: Install dependencies
-        run: npm install
+        run: bun install --frozen-lockfile
 
       - name: Build
         run: |
-          npx tsc
-          npm run copy-assets
-          node scripts/build.js ${{ matrix.build-os }}
+          bun run tsc
+          bun run copy-assets
+          bun scripts/build.js ${{ matrix.build-os }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
