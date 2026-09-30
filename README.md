@@ -47,6 +47,22 @@ You can install the app using Homebrew on macOS:
 brew install --cask cutetenshii/stuff/deezer-discord-rpc
 ```
 
+### NixOS (flake)
+
+Add the flake to your inputs:
+
+```nix
+inputs.deezer-discord-rpc.url = "github:CuteTenshii/deezer-discord-rpc";
+```
+
+Then install the package in your configuration:
+
+```nix
+environment.systemPackages = [
+  inputs.deezer-discord-rpc.packages.${pkgs.stdenv.hostPlatform.system}.default
+];
+```
+
 ### Pre-built Binaries
 
 | **Platform**                     | **Download**                                                                                                                                                                                                                                                         |
