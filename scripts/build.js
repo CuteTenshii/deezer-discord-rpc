@@ -28,6 +28,7 @@ const config = {
   },
   linux: {
     category: 'Audio;AudioVideo',
+    syncDesktopName: true,
     target: ['snap', 'deb', 'AppImage', 'rpm'],
     publish: null,
     icon: join(__dirname, '..', 'src', 'img', 'app.png'),
