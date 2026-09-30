@@ -4,31 +4,33 @@ import { dialog, shell } from 'electron';
 import { readFileSync } from 'fs';
 import { win } from './Window';
 
-function getOsAndArch() {
+function getDistroId() {
+  try {
+    const release = readFileSync('/etc/os-release', 'utf8');
+    return release.match(/^ID="?([^"\n]+)"?$/m)?.[1].toLowerCase();
+  } catch {
+    return undefined;
+  }
+}
+
+function getOsAndArch(): { os: string | null; arch: string | null; ext?: string } {
   const os = process.platform;
   const arch = process.arch;
-  const release = process.platform === 'linux' ?
-    readFileSync('/etc/os-release', 'utf8') :
-    undefined;
   if (os === 'darwin') {
     return { os: 'mac', arch };
   } else if (os === 'win32') {
     return { os: 'win', arch };
   } else if (os === 'linux') {
-    if (release) {
-      const match = release.match(/ID=([a-zA-Z0-9]+)/);
-      if (match) {
-        const distro = match[1].toLowerCase();
-        if (distro === 'ubuntu' || distro === 'debian') {
-          return { os: 'linux', arch: 'amd64', ext: 'deb' };
-        } else if (distro === 'fedora' || distro === 'centos' || distro === 'rhel') {
-          return { os: 'linux', arch: 'x86_64', ext: 'rpm' };
-        }
-      }
-    } else {
-      // Fallback to AppImage for unknown distros
-      return { os: 'linux', arch: 'x86_64', ext: 'AppImage' };
+    const appImage = { os: 'linux', arch: 'x86_64', ext: 'AppImage' };
+    // The AppImage runtime sets APPIMAGE, so its users get an AppImage back whatever their distro.
+    if (process.env.APPIMAGE) return appImage;
+    const distro = getDistroId();
+    if (distro === 'ubuntu' || distro === 'debian') {
+      return { os: 'linux', arch: 'amd64', ext: 'deb' };
+    } else if (distro === 'fedora' || distro === 'centos' || distro === 'rhel') {
+      return { os: 'linux', arch: 'x86_64', ext: 'rpm' };
     }
+    return appImage;
   }
   return { os: null, arch: null };
 }
