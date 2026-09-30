@@ -40,6 +40,10 @@ package() {
 
     # Extract the data tarball
     bsdtar -xf "$srcdir/data.tar.xz" -C "$pkgdir"
+
+    # pacman handles updates, so the app's own update check is turned off.
+    # The .desktop entry is the only launcher, as the .deb's postinst symlink is not recreated.
+    sed -Ei 's#^Exec=("[^"]*"|[^ ]*)#& --disable-updates#' "$pkgdir/usr/share/applications/deezer-discord-rpc.desktop"
 }
 `;
   await writeFile('PKGBUILD', file.trim());

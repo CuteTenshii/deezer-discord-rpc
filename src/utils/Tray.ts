@@ -1,5 +1,5 @@
 import { join } from 'path';
-import updater from './Updater';
+import updater, { updatesEnabled } from './Updater';
 import * as Config from './Config';
 import * as RPC from './RPC';
 import { Menu, Tray } from 'electron';
@@ -17,7 +17,7 @@ export async function init(app: Electron.App, client: import('@xhayper/discord-r
     const contextMenu = Menu.buildFromTemplate([
       { label: 'Deezer Discord RPC', type: 'normal', click: () => win.show() },
       { label: `Version: ${version}${process.argv0.includes('node') ? ' (debug)' : ''}`, type: 'normal', enabled: false },
-      { label: 'Check for updates', type: 'normal', click: () => updater() },
+      { label: 'Check for updates', type: 'normal', visible: updatesEnabled, click: () => updater() },
       { type: 'separator' },
       {
         label: 'Status name', type: 'submenu', submenu: await Promise.all([

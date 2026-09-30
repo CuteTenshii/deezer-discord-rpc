@@ -63,8 +63,10 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     mkdir -p "$out/share"
     cp -R app "$out/share/${finalAttrs.pname}"
 
+    # Nix handles updates, so the app's own update check is turned off.
     makeWrapper ${lib.getExe electron_44} "$out/bin/${finalAttrs.pname}" \
-      --add-flags "$out/share/${finalAttrs.pname}"
+      --add-flags "$out/share/${finalAttrs.pname}" \
+      --add-flags --disable-updates
 
     # hicolor has no 1024x1024 size, so the icon goes where lookups fall back.
     install -Dm644 src/img/app.png "$out/share/pixmaps/${finalAttrs.pname}.png"

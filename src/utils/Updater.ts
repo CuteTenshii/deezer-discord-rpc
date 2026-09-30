@@ -1,8 +1,14 @@
 import { log } from './Log';
 import { version } from '../../package.json';
-import { dialog, shell } from 'electron';
+import { app, dialog, shell } from 'electron';
 import { readFileSync } from 'fs';
 import { win } from './Window';
+
+/**
+ * False when the app was started with --disable-updates, which packagers whose package manager
+ * handles updates (AUR, Nix) pass so the app neither checks for nor offers updates.
+ */
+export const updatesEnabled = !app.commandLine.hasSwitch('disable-updates');
 
 function getDistroId() {
   try {

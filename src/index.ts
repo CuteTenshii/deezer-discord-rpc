@@ -1,7 +1,7 @@
 import { app, BrowserWindow } from 'electron';
 import { log } from './utils/Log';
 import * as Tray from './utils/Tray';
-import updater from './utils/Updater';
+import updater, { updatesEnabled } from './utils/Updater';
 import * as RPC from './utils/RPC';
 import * as Window from './utils/Window';
 import { version } from '../package.json';
@@ -23,7 +23,7 @@ app.whenReady().then(async () => {
 
   await Tray.init(app, RPC.client);
   await Window.load(app);
-  await updater(true);
+  if (updatesEnabled) await updater(true);
 
   RPC.connect();
 
