@@ -44,7 +44,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   buildPhase = ''
     runHook preBuild
 
-    bun run build:ts
+    bun run tsc
     bun run copy-assets
 
     # The shipped tree mirrors the repo so package.json's main resolves as is.

@@ -40,7 +40,7 @@ jobs:
 
       - name: Build
         run: |
-          npm run build:ts
+          npx tsc
           npm run copy-assets
           node scripts/build.js ${{ matrix.build-os }}
 

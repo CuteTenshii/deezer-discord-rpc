@@ -5,9 +5,9 @@
   "main": "./build/src/index.js",
   "scripts": {
     "start": "electron ./build/src/index.js",
-    "build:ts": "tsc --resolveJsonModule",
-    "build": "bun run build:ts && bun run copy-assets && bun scripts/build.js",
-    "run": "bun run build:ts && bun run copy-assets && bun run start",
+    "run": "tsc && bun run copy-assets && bun run start",
+    "build": "tsc && bun run copy-assets && bun scripts/build.js",
+    "typecheck": "tsc --noEmit",
     "postinstall": "electron-builder install-app-deps && bun2nix -o bun.nix",
     "lint": "eslint --ext .ts ./src",
     "lint:fix": "eslint --fix --ext .ts ./src",
