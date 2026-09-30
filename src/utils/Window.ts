@@ -1,10 +1,11 @@
 import { userAgent } from '../variables';
 import { join, resolve } from 'path';
+import { pathToFileURL } from 'url';
 import * as Config from './Config';
 import * as RPC from './RPC';
 import { log } from './Log';
 import { runJs, wait } from '../functions';
-import { BrowserWindow, ipcMain, shell, nativeImage, session } from 'electron';
+import { BrowserWindow, ipcMain, nativeImage } from 'electron';
 import { setActivity } from './Activity';
 
 const deezerUrl = 'https://account.deezer.com/login/';
@@ -36,6 +37,53 @@ let sendInFlight = false;
 let rateTokens = RATE_CAPACITY;
 let rateLastRefill = Date.now();
 
+const deezerDomain = 'deezer.com';
+const authenticationDomains = ['facebook.com', 'apple.com'];
+const trackerDomains = [
+  'doubleclick.net',
+  'google-analytics.com',
+  'googlesyndication.com',
+  'googletagmanager.com',
+  'sentry.io',
+  'sentry-cdn.com',
+];
+
+function parseStrictHttpsUrl(value: string): URL | null {
+  try {
+    const url = new URL(value);
+    const authority = url.href.slice(url.protocol.length + 2).split('/', 1)[0];
+    if (url.protocol !== 'https:' || authority.includes('@') || url.host !== url.hostname)
+      return null;
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+function isHostOrSubdomain(hostname: string, domain: string): boolean {
+  return hostname === domain || hostname.endsWith(`.${domain}`);
+}
+
+function isTrustedDeezerUrl(value: string): boolean {
+  const url = parseStrictHttpsUrl(value);
+  return !!url && isHostOrSubdomain(url.hostname, deezerDomain);
+}
+
+function isTrustedAuthenticationUrl(value: string): boolean {
+  const url = parseStrictHttpsUrl(value);
+  return !!url && (url.hostname === 'accounts.google.com' ||
+    authenticationDomains.some(domain => isHostOrSubdomain(url.hostname, domain)));
+}
+
+function isBlockedTrackerUrl(value: string): boolean {
+  const url = parseStrictHttpsUrl(value);
+  return !!url && trackerDomains.some(domain => isHostOrSubdomain(url.hostname, domain));
+}
+
+function isTrustedIpcSender(event: Electron.IpcMainEvent): boolean {
+  return event.sender === win.webContents && isTrustedDeezerUrl(event.senderFrame?.url ?? '');
+}
+
 export async function load(app: Electron.App) {
   const width = parseInt(await Config.get(app, 'window_width')) || 1920;
   const height = parseInt(await Config.get(app, 'window_height')) || 1080;
@@ -49,7 +97,14 @@ export async function load(app: Electron.App) {
     title: 'Deezer Discord RPC',
     icon: join(__dirname, '..', 'img', 'app.png'),
     webPreferences: {
-      preload: resolve(__dirname, '..', 'preload.js')
+      preload: resolve(__dirname, '..', 'preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      webviewTag: false,
+      navigateOnDragDrop: false,
     }
   });
   if (width === 1920 && height === 1080) win.maximize();
@@ -57,22 +112,34 @@ export async function load(app: Electron.App) {
   win.show();
   win.setMenuBarVisibility(process.platform === 'darwin');
 
-  session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
-    if (details.url.includes('deezer.com'))
+  const windowSession = win.webContents.session;
+  windowSession.setPermissionCheckHandler(() => false);
+  windowSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+  windowSession.webRequest.onBeforeRequest((details, callback) => {
+    callback({ cancel: isBlockedTrackerUrl(details.url) });
+  });
+  windowSession.webRequest.onBeforeSendHeaders((details, callback) => {
+    const requestUrl = parseStrictHttpsUrl(details.url);
+    if (requestUrl && isHostOrSubdomain(requestUrl.hostname, deezerDomain))
       details.requestHeaders['User-Agent'] = userAgent;
-    if (details.url.startsWith('https://www.deezer.com/ajax/gw-light.php?method=deezer.adConfig')) // Remove ads
+    if (requestUrl?.hostname === 'www.deezer.com' && requestUrl.pathname === '/ajax/gw-light.php' &&
+        requestUrl.searchParams.get('method') === 'deezer.adConfig')
       return callback({ cancel: true });
     callback({ cancel: false, requestHeaders: details.requestHeaders });
   });
 
-  win.on('resized', () => {
-    const [w, h] = win.getSize();
-    Config.set(app, 'window_width', w);
-    Config.set(app, 'window_height', h);
-  });
+  const guardMainNavigation = (event: { preventDefault: () => void }, url: string) => {
+    if (isTrustedDeezerUrl(url)) return;
+    event.preventDefault();
+    log('Window', 'Blocked navigation outside Deezer.');
+  };
+  win.webContents.on('will-navigate', guardMainNavigation);
+  win.webContents.on('will-redirect', guardMainNavigation);
+
+  win.webContents.on('will-attach-webview', (event) => event.preventDefault());
 
   win.webContents.setWindowOpenHandler((details) => {
-    if (details.url.includes('facebook.com') || details.url.includes('apple.com') || details.url.includes('accounts.google.com')) {
+    if (isTrustedAuthenticationUrl(details.url)) {
       return {
         action: 'allow',
         overrideBrowserWindowOptions: {
@@ -85,12 +152,41 @@ export async function load(app: Electron.App) {
           resizable: true,
           title: 'Deezer Discord RPC',
           icon: join(__dirname, '..', 'img', 'app.ico'),
+          webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: true,
+            webSecurity: true,
+            allowRunningInsecureContent: false,
+            webviewTag: false,
+            navigateOnDragDrop: false,
+          },
         }
       };
     } else {
-      shell.openExternal(details.url);
+      log('Window', 'Blocked an untrusted popup.');
       return { action: 'deny' };
     }
+  });
+
+  win.webContents.on('did-create-window', (childWindow) => {
+    const guardAuthenticationNavigation = (event: { preventDefault: () => void }, url: string) => {
+      if (isTrustedAuthenticationUrl(url) || isTrustedDeezerUrl(url)) return;
+      event.preventDefault();
+      log('Window', 'Blocked navigation outside the authentication flow.');
+    };
+    childWindow.webContents.on('will-navigate', guardAuthenticationNavigation);
+    childWindow.webContents.on('will-redirect', guardAuthenticationNavigation);
+    childWindow.webContents.setWindowOpenHandler(() => {
+      log('Window', 'Blocked a popup from the authentication flow.');
+      return { action: 'deny' };
+    });
+  });
+
+  win.on('resized', () => {
+    const [w, h] = win.getSize();
+    Config.set(app, 'window_width', w);
+    Config.set(app, 'window_height', h);
   });
 
   win.webContents.once('did-stop-loading', async () => {
@@ -119,7 +215,7 @@ export async function load(app: Electron.App) {
   win.webContents.on('did-finish-load', () => {
     playerWatchId++;
     stopActivityPoll();
-    if (new URL(win.webContents.getURL()).hostname.endsWith('deezer.com')) watchForPlayer(app, playerWatchId);
+    if (isTrustedDeezerUrl(win.webContents.getURL())) watchForPlayer(app, playerWatchId);
   });
 
   // Discord drops the activity when the connection closes, so resend it once the client is back.
@@ -145,12 +241,25 @@ export async function load(app: Electron.App) {
     win.hide();
   });
 
-  ipcMain.on('update_activity', (_, currentTimeChanged) => {
-    scheduleActivityUpdate(app, currentTimeChanged === true);
+  ipcMain.on('update_activity', (event, currentTimeChanged) => {
+    if (!isTrustedIpcSender(event) || typeof currentTimeChanged !== 'boolean') return;
+    scheduleActivityUpdate(app, currentTimeChanged);
   });
-  ipcMain.on('nav_back', () => win.webContents.navigationHistory.goBack());
-  ipcMain.on('nav_forward', () => win.webContents.navigationHistory.goForward());
-  ipcMain.on('retry_load', () => loadDeezer());
+  ipcMain.on('nav_back', (event) => {
+    if (isTrustedIpcSender(event) && win.webContents.navigationHistory.canGoBack())
+      win.webContents.navigationHistory.goBack();
+  });
+  ipcMain.on('nav_forward', (event) => {
+    if (isTrustedIpcSender(event) && win.webContents.navigationHistory.canGoForward())
+      win.webContents.navigationHistory.goForward();
+  });
+  ipcMain.on('retry_load', (event) => {
+    if (event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) return;
+    const senderUrl = new URL(event.senderFrame.url);
+    senderUrl.search = '';
+    senderUrl.hash = '';
+    if (senderUrl.href === pathToFileURL(offlinePagePath).href) loadDeezer();
+  });
 
   await loadDeezer();
 }
@@ -172,7 +281,7 @@ async function watchForPlayer(app: Electron.App, watchId: number) {
     // Rejects while the page is navigating; the next tick simply tries again.
     const element = await runJs('document.querySelector(\'[data-testid="item_title"]\')').catch(() => null);
     if (element) {
-      injectPlayerHooks();
+      await injectPlayerHooks().catch(reason => log('Window', 'Failed to initialize the player:', String(reason)));
       startActivityPoll(app);
       return;
     }
@@ -193,31 +302,31 @@ function stopActivityPoll() {
   activityPoll = undefined;
 }
 
-function injectPlayerHooks() {
-  runJs(`document.querySelector('[data-testid="miniplayer_container"] .slider').addEventListener('click', () => ipcRenderer.send('update_activity', true))
-         const trackObserver = new MutationObserver(() => ipcRenderer.send('update_activity', false));
+async function injectPlayerHooks() {
+  await runJs(`document.querySelector('[data-testid="miniplayer_container"] .slider').addEventListener('click', () => deezerRpc.updateActivity(true))
+         const trackObserver = new MutationObserver(() => deezerRpc.updateActivity(false));
          trackObserver.observe(document.querySelector('.marquee-content > [data-testid="item_title"]'), { childList: true, subtree: true, characterData: true });
-         const playObserver = new MutationObserver(() => ipcRenderer.send('update_activity', false));
+         const playObserver = new MutationObserver(() => deezerRpc.updateActivity(false));
          playObserver.observe(document.querySelector('.chakra-button__group > button[data-testid^="play_button_"]'), { attributes: true, childList: false, subtree: false });
-         document.querySelector('.chakra-button__group > button[data-testid^="play_button_"]').addEventListener('click', () => ipcRenderer.send('update_activity', false));`);
-  runJs(`const chakraStack = document.querySelector('#dzr-app > .naboo > div[class*="css-"] > div[class*="css-"] a.chakra-link');
+         document.querySelector('.chakra-button__group > button[data-testid^="play_button_"]').addEventListener('click', () => deezerRpc.updateActivity(false));`);
+  await runJs(`const chakraStack = document.querySelector('#dzr-app > .naboo > div[class*="css-"] > div[class*="css-"] a.chakra-link');
          const navContainer = document.createElement('div');
          navContainer.style.display = 'flex';
          navContainer.style.justifyContent = 'space-around';
          const backButton = document.createElement('button');
-         backButton.addEventListener('click', () => ipcRenderer.send('nav_back'));
+         backButton.addEventListener('click', () => deezerRpc.navigateBack());
          backButton.textContent = '<';
          backButton.style.transform = 'scale(2, 4)';
          backButton.style.opacity = '30%';
          const forwardButton = document.createElement('button');
-         forwardButton.addEventListener('click', () => ipcRenderer.send('nav_forward'));
+         forwardButton.addEventListener('click', () => deezerRpc.navigateForward());
          forwardButton.textContent = '>';
          forwardButton.style.transform = 'scale(2, 4)';
          forwardButton.style.opacity = '30%';
          navContainer.appendChild(backButton);
          navContainer.appendChild(forwardButton);
          chakraStack.replaceWith(navContainer);`);
-  setThumbarButtons();
+  await setThumbarButtons();
 }
 
 export async function showWindow() {
