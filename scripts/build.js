@@ -1,7 +1,9 @@
 /* eslint @typescript-eslint/no-require-imports: 0 */
 const { build } = require('electron-builder');
 const { existsSync, rmSync } = require('fs');
-const { resolve, join } = require('path');
+const { resolve, join, basename } = require('path');
+const { embedUpdateInformation } = require('./appimage');
+const { repository } = require('../package.json');
 
 // If the Electron app build folder exists, we need to delete it
 if (existsSync(resolve('dist'))) {
@@ -75,9 +77,16 @@ if (specifiedOS) {
   config.linux = undefined;
 }
 
+const [, owner, repo] = repository.match(/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?$/);
+
 build({
   config,
   publish: 'never'
-}).then(() => {
+}).then((artifacts) => {
+  // Points AppImage update tools at the .zsync file CI publishes next to the AppImage on each release.
+  for (const appImage of artifacts.filter((artifact) => artifact.endsWith('.AppImage'))) {
+    embedUpdateInformation(appImage, `gh-releases-zsync|${owner}|${repo}|latest|${basename(appImage)}.zsync`);
+    console.log(`Embedded update information in ${basename(appImage)}`);
+  }
   console.log('\nSetup built in the "dist" folder.');
 });

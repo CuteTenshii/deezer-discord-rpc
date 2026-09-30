@@ -17,6 +17,7 @@ jobs:
             artifacts: |
               dist/*.deb
               dist/*.AppImage
+              dist/*.AppImage.zsync
               dist/*.rpm
               dist/*.snap
           - os: windows-latest
@@ -41,6 +42,17 @@ jobs:
           bun run tsc
           bun run copy-assets
           bun scripts/build.js ${{ matrix.build-os }}
+
+      # AppImage update tools download this to fetch only the blocks that changed.
+      - name: Generate AppImage zsync file
+        if: matrix.build-os == 'linux'
+        working-directory: dist
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zsync
+          for appimage in *.AppImage; do
+            zsyncmake -u "$appimage" -o "$appimage.zsync" "$appimage"
+          done
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
