@@ -9,8 +9,7 @@
     "build": "tsc && bun run copy-assets && bun scripts/build.js",
     "typecheck": "tsc --noEmit",
     "postinstall": "electron-builder install-app-deps && bun2nix -o bun.nix",
-    "lint": "eslint --ext .ts ./src",
-    "lint:fix": "eslint --fix --ext .ts ./src",
+    "lint": "eslint",
     "copy-assets": "cpy --flat ./src/img/* ./build/src/img/ && cpy --flat ./src/offline.html ./build/src/"
   },
   "dependencies": {
@@ -20,6 +19,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.7",
     "@eslint/js": "^10.0.1",
+    "@stylistic/eslint-plugin": "^5.10.0",
     "@types/node": "^26.6.3",
     "bun2nix": "^2.1.2",
     "cpy-cli": "^7.0.0",

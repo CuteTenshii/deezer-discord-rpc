@@ -6,6 +6,7 @@ import js from '@eslint/js';
 import { FlatCompat } from '@eslint/eslintrc';
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
+import stylistic from '@stylistic/eslint-plugin';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,7 +17,7 @@ const compat = new FlatCompat({
 });
 
 export default defineConfig([
-  globalIgnores(['**/dist/', '**/node_modules/']),
+  globalIgnores(['**/dist/', '**/node_modules/', '*', '!src/', 'src/**/*.*', '!src/**/*.ts']),
   eslint.configs.recommended,
   tseslint.configs.recommended,
   {
@@ -29,13 +30,16 @@ export default defineConfig([
       ecmaVersion: 'latest',
       sourceType: 'module',
     },
+    plugins: {
+      '@stylistic': stylistic,
+    },
     rules: {
-      indent: ['error', 2, {
+      '@stylistic/indent': ['error', 2, {
         SwitchCase: 1,
       }],
-      quotes: ['error', 'single'],
-      semi: ['error', 'always'],
-      'object-curly-spacing': ['error', 'always'],
+      '@stylistic/quotes': ['error', 'single'],
+      '@stylistic/semi': ['error', 'always'],
+      '@stylistic/object-curly-spacing': ['error', 'always'],
     },
   }
 ]);
