@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.5.0
+
+* Added playback controls to the tray menu: previous, play/pause, next, shuffle and repeat (off, all or one). Shuffle and repeat are greyed out when Deezer doesn't allow them, like in Flow
+* Changing the status name now updates Discord right away, instead of on the next track
+* With the status name set to the song title or the artists, Discord still shows Deezer as the app name
+* The RPC reconnects on its own when Discord starts after the app, restarts or drops the connection
+* The updater offers the AppImage to AppImage users, and to distros other than Debian and Fedora
+* The AppImage can now be updated with AppImageUpdate
+* Packagers can pass `--disable-updates` to turn off update checks; the AUR and Nix packages do
+* Updated to Electron 45, which no longer trusts the compromised eMudhra certificates (Electron 44.9.3 for the Nix package)
+
 ## 1.4.0
 
 * The Discord status now stays in sync with Deezer: it no longer shows a previous track or stays stuck on pause, and it comes back after Discord reconnects (https://github.com/CuteTenshii/deezer-discord-rpc/pull/186)
