@@ -197,6 +197,12 @@ function stopActivityPoll() {
   setPlayerState(null);
 }
 
+/** Sends the activity again even if the track is unchanged, e.g. after a setting that affects it. */
+export function resendActivity(app: Electron.App) {
+  sentKey = '';
+  scheduleActivityUpdate(app);
+}
+
 export async function refreshPlayerControls() {
   // language=JavaScript
   const code = `(() => {

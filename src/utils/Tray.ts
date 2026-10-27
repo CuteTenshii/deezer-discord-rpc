@@ -5,7 +5,7 @@ import * as RPC from './RPC';
 import { Menu, Tray } from 'electron';
 import { version } from '../../package.json';
 import { log } from './Log';
-import { refreshPlayerControls, win } from './Window';
+import { refreshPlayerControls, resendActivity, win } from './Window';
 import { runJs } from '../functions';
 import MenuItemConstructorOptions = Electron.MenuItemConstructorOptions;
 
@@ -99,7 +99,10 @@ function buildMenu() {
         ['Song title - Artists song', 'title_and_artists'],
       ].map((v): MenuItemConstructorOptions => ({
         label: v[0], type: 'radio', id: v[1], checked: (Config.get(trayApp, 'status_name') ?? 'app_name') === v[1],
-        click: (menuItem) => Config.set(trayApp, 'status_name', menuItem.id),
+        click: async (menuItem) => {
+          await Config.set(trayApp, 'status_name', menuItem.id);
+          resendActivity(trayApp);
+        },
       }))
     },
     {
