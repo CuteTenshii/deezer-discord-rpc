@@ -1,7 +1,7 @@
 import * as Config from './Config';
 import { tray } from './Tray';
 import { version } from '../../package.json';
-import { ActivityType } from 'discord-api-types/v10';
+import { ActivityType, StatusDisplayType } from 'discord-api-types/v10';
 
 const getTrackLink = (type: string, trackId: string) => {
   switch (type) {
@@ -53,25 +53,26 @@ export async function setActivity({
   const isLivestream = (Date.now() + timeLeft) < Date.now();
   const playedTime = Date.now() - songTime + timeLeft;
 
-  const getStatusName = () => {
+  // The name is also the app name on the activity card, so only statuses no other field holds replace it.
+  const getStatus = (): { name: string, statusDisplayType: StatusDisplayType } => {
     switch (statusName) {
       case 'song_title':
-        return trackTitle;
+        return { name: 'Deezer', statusDisplayType: StatusDisplayType.Details };
       case 'artists_song':
-        return trackArtists;
+        return { name: 'Deezer', statusDisplayType: StatusDisplayType.State };
       case 'artists_and_title':
-        return `${trackArtists} - ${trackTitle}`;
+        return { name: `${trackArtists} - ${trackTitle}`, statusDisplayType: StatusDisplayType.Name };
       case 'title_and_artists':
-        return `${trackTitle} - ${trackArtists}`;
+        return { name: `${trackTitle} - ${trackArtists}`, statusDisplayType: StatusDisplayType.Name };
       default:
-        return 'Deezer';
+        return { name: 'Deezer', statusDisplayType: StatusDisplayType.Name };
     }
   };
 
   // Rejections (e.g. Discord's rate limit) reach the caller so it can retry instead of assuming the update landed.
   return client.user.setActivity({
     type: ActivityType.Listening,
-    name: getStatusName(),
+    ...getStatus(),
     details: getTrackTitle(trackTitle),
     detailsUrl: trackLink,
     state: trackArtists,
