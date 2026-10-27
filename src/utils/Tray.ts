@@ -51,7 +51,8 @@ export function setPlayerState(state: PlayerState | null) {
 }
 
 function controlPlayer(code: string) {
-  runJs(code).then(() => refreshPlayerControls()).catch(console.error);
+  // The result is not needed, and one that cannot be cloned would reject the call.
+  runJs(`void (${code})`).then(() => refreshPlayerControls()).catch(console.error);
 }
 
 function buildMenu() {

@@ -171,8 +171,9 @@ function showOfflinePage(reason: string) {
 async function watchForPlayer(app: Electron.App, watchId: number) {
   while (watchId === playerWatchId && !win.isDestroyed()) {
     // Rejects while the page is navigating; the next tick simply tries again.
-    const element = await runJs('document.querySelector(\'[data-testid="item_title"]\')').catch(() => null);
-    if (element) {
+    // Electron 45+ rejects results that cannot be cloned, such as DOM elements, so only a boolean is returned.
+    const hasPlayer = await runJs('!!document.querySelector(\'[data-testid="item_title"]\')').catch(() => false);
+    if (hasPlayer) {
       injectPlayerHooks();
       startActivityPoll(app);
       return;
