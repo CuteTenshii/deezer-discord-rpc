@@ -50,8 +50,10 @@ export async function setActivity({
   const button = (trackLink && Number.parseInt(trackId) > 0) ?
     { label: 'Play on Deezer', url: trackLink } :
     undefined;
-  const isLivestream = (Date.now() + timeLeft) < Date.now();
-  const playedTime = Date.now() - songTime + timeLeft;
+  const isLivestream = timeLeft < 0;
+  const now = Date.now();
+  const startTimestamp = isLivestream ? now + timeLeft : now + timeLeft - songTime;
+  const endTimestamp = isLivestream ? undefined : now + timeLeft;
 
   // The name is also the app name on the activity card, so only statuses no other field holds replace it.
   const getStatus = (): { name: string, statusDisplayType: StatusDisplayType } => {
@@ -81,8 +83,8 @@ export async function setActivity({
     largeImageText: albumTitle,
     largeImageUrl: albumId ? `https://www.deezer.com/album/${albumId}` : undefined,
     instance: false,
-    startTimestamp: playedTime,
-    [isLivestream ? 'startTimestamp' : 'endTimestamp']: Date.now() + timeLeft,
+    startTimestamp,
+    endTimestamp,
     buttons: button ? [button] : undefined,
   });
 }
