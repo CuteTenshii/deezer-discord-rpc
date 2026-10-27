@@ -6,6 +6,7 @@ import { log } from './Log';
 import { runJs, wait } from '../functions';
 import { BrowserWindow, ipcMain, shell, nativeImage, session } from 'electron';
 import { setActivity } from './Activity';
+import { setPlayerState } from './Tray';
 
 const deezerUrl = 'https://account.deezer.com/login/';
 const offlinePagePath = join(__dirname, '..', 'offline.html');
@@ -182,15 +183,38 @@ async function watchForPlayer(app: Electron.App, watchId: number) {
 
 function startActivityPoll(app: Electron.App) {
   stopActivityPoll();
+  refreshPlayerControls();
   activityPoll = setInterval(() => {
     if (win.isDestroyed()) return stopActivityPoll();
     scheduleActivityUpdate(app);
+    refreshPlayerControls();
   }, ACTIVITY_POLL_MS);
 }
 
 function stopActivityPoll() {
   clearInterval(activityPoll);
   activityPoll = undefined;
+  setPlayerState(null);
+}
+
+export async function refreshPlayerControls() {
+  // language=JavaScript
+  const code = `(() => {
+      if (typeof dzPlayer === 'undefined') return null;
+      // Deezer keeps whether these are allowed in its store, which dzPlayer does not expose.
+      const isAllowed = (testId) => document.querySelector(\`[data-testid^="\${testId}"]\`)?.disabled === false;
+      return JSON.stringify({
+        playing: dzPlayer.isPlaying(),
+        hasPrevious: !!dzPlayer.getPrevSong(),
+        hasNext: !!dzPlayer.getNextSong(),
+        shuffle: dzPlayer.isShuffle(),
+        canShuffle: isAllowed('shuffle_play_button_'),
+        repeat: dzPlayer.getRepeat(),
+        canRepeat: isAllowed('repeat_button_'),
+      });
+    })()`;
+  const r = await runJs(code).catch(() => null);
+  setPlayerState(r ? JSON.parse(r) : null);
 }
 
 function injectPlayerHooks() {
