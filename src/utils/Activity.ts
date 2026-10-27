@@ -3,6 +3,20 @@ import { tray } from './Tray';
 import { version } from '../../package.json';
 import { ActivityType } from 'discord-api-types/v10';
 
+const getTrackLink = (type: string, trackId: string) => {
+  switch (type) {
+    case 'song':
+      return `https://www.deezer.com/track/${trackId}`;
+    case 'episode':
+      return `https://www.deezer.com/episode/${trackId}`;
+  }
+};
+
+const getTrackTitle = (trackTitle: string) => {
+  if (trackTitle.length === 1) return trackTitle.concat(' ');
+  return trackTitle;
+};
+
 export async function setActivity({
   timeLeft, playing, client, albumTitle, albumId, trackArtists, trackTitle, albumCover, app, type, trackId, songTime,
   firstArtistId,
@@ -32,19 +46,12 @@ export async function setActivity({
   }
   if (!playing) return client.user.clearActivity();
 
-  const getTrackLink = () => {
-    switch (type) {
-      case 'song':
-        return `https://www.deezer.com/track/${trackId}`;
-      case 'episode':
-        return `https://www.deezer.com/episode/${trackId}`;
-    }
-  };
-
-  const getTrackTitle = () => {
-    if (trackTitle.length == 1) return trackTitle.concat(' ');
-    return trackTitle;
-  };
+  const trackLink = getTrackLink(type, trackId);
+  const button = (trackLink && Number.parseInt(trackId) > 0) ?
+    { label: 'Play on Deezer', url: trackLink } :
+    undefined;
+  const isLivestream = (Date.now() + timeLeft) < Date.now();
+  const playedTime = Date.now() - songTime + timeLeft;
 
   const getStatusName = () => {
     switch (statusName) {
@@ -61,18 +68,11 @@ export async function setActivity({
     }
   };
 
-  const trackLink = getTrackLink();
-  const button = (trackLink && Number.parseInt(trackId) > 0) ?
-    { label: 'Play on Deezer', url: trackLink } :
-    undefined;
-  const isLivestream = (Date.now() + timeLeft) < Date.now();
-  const playedTime = Date.now() - songTime + timeLeft;
-
   // Rejections (e.g. Discord's rate limit) reach the caller so it can retry instead of assuming the update landed.
   return client.user.setActivity({
     type: ActivityType.Listening,
     name: getStatusName(),
-    details: getTrackTitle(),
+    details: getTrackTitle(trackTitle),
     detailsUrl: trackLink,
     state: trackArtists,
     stateUrl: firstArtistId ? `https://www.deezer.com/artist/${firstArtistId}` : undefined,
