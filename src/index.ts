@@ -21,7 +21,7 @@ app.whenReady().then(async () => {
     });
   }
 
-  await Tray.init(app, RPC.client);
+  await Tray.init(app);
   await Window.load(app);
   if (updatesEnabled) await updater(true);
 

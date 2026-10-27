@@ -4,7 +4,6 @@ import * as Config from './Config';
 import * as RPC from './RPC';
 import { Menu, Tray } from 'electron';
 import { version } from '../../package.json';
-import { log } from './Log';
 import { refreshPlayerControls, resendActivity, win } from './Window';
 import { runJs } from '../functions';
 import MenuItemConstructorOptions = Electron.MenuItemConstructorOptions;
@@ -30,12 +29,10 @@ export interface PlayerState {
 
 export let tray: Tray | null = null;
 let trayApp: Electron.App;
-let rpcClient: import('@xhayper/discord-rpc').Client;
 let playerState: PlayerState | null = null;
 
-export async function init(app: Electron.App, client: import('@xhayper/discord-rpc').Client) {
+export async function init(app: Electron.App) {
   trayApp = app;
-  rpcClient = client;
   app?.whenReady().then(async () => {
     tray = new Tray(iconPath);
     tray.setToolTip('Deezer Discord RPC');
@@ -120,19 +117,6 @@ function buildMenu() {
     {
       label: 'Don\'t close to tray', type: 'checkbox', checked: Config.get(trayApp, 'dont_close_to_tray'),
       click: (menuItem) => Config.set(trayApp, 'dont_close_to_tray', menuItem.checked)
-    },
-    {
-      id: 'reconnect',
-      label: 'Reconnect RPC',
-      type: 'normal',
-      visible: false,
-      click: () => {
-        rpcClient.login()
-          .then(() => {
-            log('RPC', 'Reconnected');
-          })
-          .catch(console.error);
-      }
     },
     { type: 'separator' },
     {

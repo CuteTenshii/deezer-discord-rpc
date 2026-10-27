@@ -124,7 +124,7 @@ export async function load(app: Electron.App) {
   });
 
   // Discord drops the activity when the connection closes, so resend it once the client is back.
-  RPC.client.on('ready', () => {
+  RPC.onReady(() => {
     sentKey = '';
     scheduleActivityUpdate(app);
   });
