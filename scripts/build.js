@@ -33,7 +33,8 @@ const config = {
     syncDesktopName: true,
     target: ['snap', 'deb', 'AppImage', 'rpm'],
     publish: null,
-    icon: join(__dirname, '..', 'src', 'img', 'app.png'),
+    // A single PNG is installed at its own size only, so ship one per hicolor size.
+    icon: join(__dirname, '..', 'src', 'img', 'icons'),
   },
   toolsets: {
     // The legacy runtime links against the host glibc and needs libfuse2;

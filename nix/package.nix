@@ -68,8 +68,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
       --add-flags "$out/share/${finalAttrs.pname}" \
       --add-flags --disable-updates
 
-    # hicolor has no 1024x1024 size, so the icon goes where lookups fall back.
-    install -Dm644 src/img/app.png "$out/share/pixmaps/${finalAttrs.pname}.png"
+    for icon in src/img/icons/*.png; do
+      install -Dm644 "$icon" "$out/share/icons/hicolor/$(basename "$icon" .png)/apps/${finalAttrs.pname}.png"
+    done
 
     runHook postInstall
   '';

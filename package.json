@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit",
     "postinstall": "electron-builder install-app-deps && bun2nix -o bun.nix",
     "lint": "eslint",
-    "copy-assets": "cpy --flat ./src/img/* ./build/src/img/ && cpy --flat ./src/offline.html ./build/src/"
+    "copy-assets": "cpy --flat ./src/img/* '!./src/img/icons/**' ./build/src/img/ && cpy --flat ./src/offline.html ./build/src/"
   },
   "dependencies": {
     "@xhayper/discord-rpc": "^1.5.1",
