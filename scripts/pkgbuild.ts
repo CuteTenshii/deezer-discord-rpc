@@ -2,7 +2,9 @@ import { writeFile } from 'fs/promises';
 import { version, description, license } from '../package.json';
 import { createHash } from 'crypto';
 
-const downloadUrl = 'https://github.com/CuteTenshii/deezer-discord-rpc/releases/latest/download/DeezerDiscordRPC-linux-amd64.deb';
+const downloadUrl = `https://github.com/CuteTenshii/deezer-discord-rpc/releases/download/${version}/DeezerDiscordRPC-linux-amd64.deb`;
+// makepkg reuses any cached source with the same name, so an unversioned name would feed it the previous release.
+const sourceName = `deezer-discord-rpc-${version}.deb`;
 
 // Both digests are computed from one download so they always describe the same file.
 async function getChecksums() {
@@ -30,13 +32,13 @@ arch=('x86_64')
 url="https://github.com/CuteTenshii/deezer-discord-rpc"
 license=('${license}')
 depends=('gtk3' 'nss' 'alsa-lib' 'mesa' 'xdg-utils')
-source=("${downloadUrl}")
+source=("${sourceName}::${downloadUrl}")
 md5sums=("${md5}")
 sha256sums=("${sha256}")
 
 package() {
     # Extract the .deb file
-    bsdtar -xf "DeezerDiscordRPC-linux-amd64.deb" -C "$srcdir"
+    bsdtar -xf "${sourceName}" -C "$srcdir"
 
     # Extract the data tarball
     bsdtar -xf "$srcdir/data.tar.xz" -C "$pkgdir"
