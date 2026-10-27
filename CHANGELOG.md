@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.1
+
+* Fixed the Discord status not following track changes, and the tray's playback controls staying greyed out, since the move to Electron 45 in 1.5.0
+* Opening the app while it's already running no longer briefly creates a second tray icon
+* The AUR package no longer fails its checksum check when an older version's download is still cached
+
 ## 1.5.0
 
 * Added playback controls to the tray menu: previous, play/pause, next, shuffle and repeat (off, all or one). Shuffle and repeat are greyed out when Deezer doesn't allow them, like in Flow
