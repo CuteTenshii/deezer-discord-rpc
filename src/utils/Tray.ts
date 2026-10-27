@@ -27,7 +27,7 @@ export async function init(app: Electron.App, client: import('@xhayper/discord-r
           ['Artists song - Song title', 'artists_and_title'],
           ['Song title - Artists song', 'title_and_artists'],
         ].map(async (v): Promise<MenuItemConstructorOptions> => ({
-          label: v[0], type: 'radio', id: v[1], checked: await Config.get(app, 'status_name') === v[1],
+          label: v[0], type: 'radio', id: v[1], checked: (await Config.get(app, 'status_name') ?? 'app_name') === v[1],
           click: (menuItem) => Config.set(app, 'status_name', menuItem.id),
         })))
       },
@@ -39,7 +39,7 @@ export async function init(app: Electron.App, client: import('@xhayper/discord-r
           ['Artists song - Song title', 'artists_and_title'],
           ['Song title - Artists song', 'title_and_artists'],
         ].map(async (v): Promise<MenuItemConstructorOptions> => ({
-          label: v[0], type: 'radio', id: v[1], checked: await Config.get(app, 'tooltip_text') === v[1],
+          label: v[0], type: 'radio', id: v[1], checked: (await Config.get(app, 'tooltip_text') ?? 'app_name') === v[1],
           click: (menuItem) => Config.set(app, 'tooltip_text', menuItem.id),
         })))
       },
