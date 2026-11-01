@@ -23,7 +23,7 @@
     "@types/node": "^26.6.5",
     "bun2nix": "^2.1.2",
     "cpy-cli": "^7.0.0",
-    "electron": "^45.0.0",
+    "electron": "^45.1.0",
     "electron-builder": "^26.18.0",
     "eslint": "^10.13.0",
     "globals": "^17.13.0",
