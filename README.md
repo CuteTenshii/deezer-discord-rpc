@@ -35,15 +35,29 @@
 
 You can install the [`deezer-discord-rpc-bin`](https://aur.archlinux.org/packages/deezer-discord-rpc-bin) package from the AUR using your favorite AUR helper, such as `yay` or `paru`:
 
-```bash
+```sh
 yay -S deezer-discord-rpc-bin
+```
+
+### APT (Debian/Ubuntu)
+
+```sh
+# Trust the repo key
+sudo install -d -m 755 /etc/apt/keyrings
+curl -fsSL https://apt.tenshii.moe/key.gpg | sudo tee /etc/apt/keyrings/tenshii.gpg >/dev/null
+
+# Add the repo
+echo "deb [signed-by=/etc/apt/keyrings/tenshii.gpg] https://apt.tenshii.moe stable main" | sudo tee /etc/apt/sources.list.d/tenshii.list
+
+# Install
+sudo apt update && sudo apt install deezer-discord-rpc
 ```
 
 ### Homebrew (macOS)
 
 You can install the app using Homebrew on macOS:
 
-```bash
+```sh
 brew install --cask cutetenshii/stuff/deezer-discord-rpc
 ```
 
